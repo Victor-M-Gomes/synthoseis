@@ -552,12 +552,29 @@ class Parameters(_Borg):
         )
 
         # Minimum shallowest depth of seabed
-        if (
-            len(self.seabed_min_depth) > 1
-        ):  # if low/high value provided, select a value between these
-            self.seabed_min_depth = np.random.randint(
-                low=self.seabed_min_depth[0], high=self.seabed_min_depth[1]
-            )
+        # Minimum shallowest depth of seabed
+        # Accept either a scalar or a two-element sequence. Be defensive: handle
+        # reversed or equal bounds to avoid ValueError from np.random.randint.
+        try:
+            if hasattr(self.seabed_min_depth, "__len__") and len(self.seabed_min_depth) > 1:
+                low = int(self.seabed_min_depth[0])
+                high = int(self.seabed_min_depth[1])
+                # If bounds are reversed, swap them
+                if low > high:
+                    low, high = high, low
+                # If bounds are equal, use that value directly
+                if low == high:
+                    self.seabed_min_depth = int(low)
+                else:
+                    # numpy.randint requires low < high; keep original semantics
+                    # (high is exclusive). If high == low+1 this will return low.
+                    self.seabed_min_depth = np.random.randint(low=low, high=high)
+            else:
+                # Scalar value provided: keep as int
+                self.seabed_min_depth = int(self.seabed_min_depth)
+        except Exception:
+            # As a last-resort fallback, set a conservative shallow seabed depth
+            self.seabed_min_depth = 5
 
         # Low/High bandwidth to be used
         self.lowfreq = np.random.uniform(self.bandwidth_low[0], self.bandwidth_low[1])

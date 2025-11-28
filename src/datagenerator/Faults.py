@@ -2299,6 +2299,31 @@ class Faults(Horizons, Geomodel):
             xy_dis, degrees(alpha), reshape=False, output=xy_dis_rotated, mode="nearest"
         )
         print("   ...", xy_dis_rotated.shape, xy_dis.shape)
+        # Extract central region. If resulting arrays don't match expected
+        # cube dimensions, center-crop or pad to ensure shapes are exactly
+        # (cube_shape[0], cube_shape[1]). This avoids reshape errors later.
+        def _center_crop_or_pad_2d(arr, target_shape):
+            th, tw = target_shape
+            h, w = arr.shape
+            # Crop if larger
+            if h > th:
+                sh = (h - th) // 2
+                arr = arr[sh : sh + th, :]
+            elif h < th:
+                pad_top = (th - h) // 2
+                pad_bottom = th - h - pad_top
+                arr = np.pad(arr, ((pad_top, pad_bottom), (0, 0)), mode="edge")
+            # Width
+            h, w = arr.shape
+            if w > tw:
+                sw = (w - tw) // 2
+                arr = arr[:, sw : sw + tw]
+            elif w < tw:
+                pad_left = (tw - w) // 2
+                pad_right = tw - w - pad_left
+                arr = np.pad(arr, ((0, 0), (pad_left, pad_right)), mode="edge")
+            return arr
+
         xy_dis = xy_dis[
             int(cube_shape[0]) * 2 : cube_shape[0] + int(cube_shape[0]) * 2,
             int(cube_shape[1]) * 2 : cube_shape[1] + int(cube_shape[1]) * 2,
@@ -2307,6 +2332,13 @@ class Faults(Horizons, Geomodel):
             int(cube_shape[0]) * 2 : cube_shape[0] + int(cube_shape[0]) * 2,
             int(cube_shape[1]) * 2 : cube_shape[1] + int(cube_shape[1]) * 2,
         ].copy()
+
+        # Ensure both arrays have the expected shape
+        target2d = (cube_shape[0], cube_shape[1])
+        if xy_dis.shape != target2d:
+            xy_dis = _center_crop_or_pad_2d(xy_dis, target2d)
+        if xy_dis_drag.shape != target2d:
+            xy_dis_drag = _center_crop_or_pad_2d(xy_dis_drag, target2d)
 
         # taper edges of xy_dis_drag in 2d to avoid edge artifacts in fft
         print("    ... xy_dis_drag.shape = " + str(xy_dis_drag.shape))
