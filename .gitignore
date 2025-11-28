@@ -5,7 +5,7 @@ backup
 .idea
 .vscode
 .venv
-.egg-info
+*.egg-info
 *.ipynb_checkpoints
 *.profile.log
 __pycache__

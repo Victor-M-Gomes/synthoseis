@@ -156,7 +156,8 @@ class Faults(Horizons, Geomodel):
             self.faulted_depth_maps[:],
             self.faulted_depth_maps_gaps[:],
         ) = self.improve_depth_maps_post_faulting(
-            self.vols.geologic_age[:], self.faulted_age_volume[:], onlap_clip_dict
+            #self.vols.geologic_age[:], self.faulted_age_volume[:], onlap_clip_dict
+            self.unfaulted_depth_maps, self.faulted_age_volume[:], onlap_clip_dict
         )
 
         if self.cfg.include_salt:
@@ -2142,7 +2143,16 @@ class Faults(Horizons, Geomodel):
                         do_it = False
                         break
 
-                    random_idx = xyz_xyz[:, np.random.choice(xyz_xyz.shape[1])]
+                    # Only choose a random column if we actually have columns
+                    if xyz_xyz.size == 0 or xyz_xyz.shape[1] == 0:
+                        # Fallback: use centre of the ellipsoid/cube
+                        print("   ... No suitable intersection points found; using cube centre as fallback")
+                        x_c = int(ellipse.shape[0] // 2)
+                        y_c = int(ellipse.shape[1] // 2)
+                        z_c = int(ellipse.shape[2] // 2)
+                        random_idx = np.array([x_c, y_c, z_c])
+                    else:
+                        random_idx = xyz_xyz[:, np.random.choice(xyz_xyz.shape[1])]
                     print(
                         "   ... Computing fault middle to hang max displacement function"
                     )
@@ -2304,10 +2314,16 @@ class Faults(Horizons, Geomodel):
             "    ... xy_dis_drag[xy_dis_drag>0.].size = "
             + str(xy_dis_drag[xy_dis_drag > 0.0].size)
         )
-        print(
-            "    ... xy_dis_drag.shape min/mean/max= "
-            + str((xy_dis_drag.min(), xy_dis_drag.mean(), xy_dis_drag.max()))
-        )
+        if xy_dis_drag.size == 0:
+            print("    ... xy_dis_drag.shape min/mean/max= (nan, nan, nan)")
+        else:
+            try:
+                print(
+                    "    ... xy_dis_drag.shape min/mean/max= "
+                    + str((xy_dis_drag.min(), xy_dis_drag.mean(), xy_dis_drag.max()))
+                )
+            except Exception:
+                print("    ... xy_dis_drag.shape min/mean/max= (nan, nan, nan)")
         try:
             self.plot_counter += 1
         except:

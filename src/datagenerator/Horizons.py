@@ -344,14 +344,14 @@ class RandomHorizonStack(Horizons):
         self.facies = None
 
     def _generate_lookup_tables(self):
+        ONLAP_SCALE = 500 / 1250  # = 0.4
         # Thicknesses
         self.thicknesses = stats.gamma.rvs(4.0, 2, size=self.cfg.num_lyr_lut)
         # Onlaps
-        onlap_layer_list = np.sort(
-            np.random.uniform(
-                low=5, high=200, size=int(np.random.triangular(1, 4, 7) + 0.5)
-            ).astype("int")
-        )
+        size = int(round(np.random.triangular(1, 4, 7)))  # round the triangular sample to nearest integer
+        size = max(1, size)  # guard against non-positive sizes
+        #onlap_layer_list = np.sort(np.random.randint(5, 201, size=size))  # integers in [5,200], sorted
+        onlap_layer_list = np.sort(np.random.randint(5, int(ONLAP_SCALE * self.cfg.cube_shape[2]), size=size))  # integers in [5,z_max], sorted
         # Dips
         self.dips = (
             (1.0 - np.random.power(100, self.cfg.num_lyr_lut))
@@ -368,8 +368,11 @@ class RandomHorizonStack(Horizons):
         if self.cfg.verbose:
             print("self.cfg.num_lyr_lut = ", self.cfg.num_lyr_lut)
             print("onlap_layer_list = ", onlap_layer_list)
-        onlap_array_dim = int(500 / 1250 * self.cfg.cube_shape[2])
+        onlap_array_dim = int(ONLAP_SCALE * self.cfg.cube_shape[2])
+        print(f"DBG (VMG): onlap_array_dim = {onlap_array_dim}\n")
         self.onlaps = np.zeros(onlap_array_dim, "int")
+        print(f"DBG (VMG) self.onlaps.shape = {self.onlaps.shape}\n")
+        print(f'DBG (VMG) onlap_array_dim = {onlap_array_dim}, onlap_layer_list = {onlap_layer_list}\n')
         self.onlaps[onlap_layer_list] = 1
 
         if not self.cfg.include_channels:

@@ -6,6 +6,6 @@ plotly
 ruff>=0.10.0
 scikit-image
 scipy
-setuptools>=76.0.0
+setuptools<81,>=76.0.0
 tables>=3.9.2
 tqdm

@@ -1,7 +1,7 @@
 {
   "project": "example",
-  "project_folder": "/scratch/synthoseis_example",
-  "work_folder": "/scratch",
+  "project_folder": "/home/victor/Documents/synthoseis_example",
+  "work_folder": "/home/victor/Documents/synthoseis_example",
   "cube_shape": [300, 300, 1250],
   "incident_angles": [7, 15, 24],
   "digi": 4,
@@ -9,7 +9,7 @@
   "initial_layer_stdev": [7.0, 25.0],
   "thickness_min": 2,
   "thickness_max": 12,
-  "seabed_min_depth": [20, 50],
+  "seabed_min_depth": [50, 50],
   "signal_to_noise_ratio_db": [7.5, 12.5, 17.5],
   "bandwidth_low": [3.0, 6.0],
   "bandwidth_high": [20.0, 35.0],

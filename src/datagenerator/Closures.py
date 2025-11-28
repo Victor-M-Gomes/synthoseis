@@ -8,6 +8,24 @@ from skimage import morphology, measure
 from scipy.ndimage import minimum_filter, maximum_filter
 
 
+def _safe_stats(a):
+    """Return dictionary of mean,std,min,max using nan-aware functions.
+
+    If input is empty or all-NaN, values will be np.nan.
+    Accepts list or ndarray.
+    """
+    arr = np.array(a)
+    if arr.size == 0:
+        return {"mean": np.nan, "std": np.nan, "min": np.nan, "max": np.nan}
+    # Use nan-aware reductions to be robust to nan entries
+    return {
+        "mean": np.nanmean(arr),
+        "std": np.nanstd(arr),
+        "min": np.nanmin(arr),
+        "max": np.nanmax(arr),
+    }
+
+
 class Closures(Horizons, Geomodel, Parameters):
     def __init__(self, parameters, faults, facies, onlap_horizon_list):
         self.closure_dict = dict()
@@ -358,12 +376,13 @@ class Closures(Horizons, Geomodel, Parameters):
                                         i_indices, j_indices, k_indices.astype("int")
                                     ] += 1
                                 except IndexError:
-                                    print("\nIndex is out of bounds.")
-                                    print(f"\tclosure_segments: {closure_segments}")
-                                    print(f"\tvoxel_change_count: {voxel_change_count}")
-                                    print(f"\ti_indices: {i_indices}")
-                                    print(f"\tj_indices: {j_indices}")
-                                    print(f"\tk_indices: {k_indices.astype('int')}")
+                                    print("\nIndex is out of bounds in Closures.create_closure_labels_from_depth_maps()")
+                                    print(f"\tclosure_segments shape: {closure_segments.shape}")
+                                    print(f"\tvoxel_change_count shape: {voxel_change_count.shape}")
+                                    print(f"\ti_indices min/max: {i_indices.min()}/{i_indices.max()}, size: {i_indices.size}")
+                                    print(f"\tj_indices min/max: {j_indices.min()}/{j_indices.max()}, size: {j_indices.size}")
+                                    print(f"\tk_indices min/max: {k_indices.astype('int').min()}/{k_indices.astype('int').max()}, size: {k_indices.size}")
+                                    print(f"\tihorizon: {ihorizon}")
                                     pass
 
                         if slices_with_substitution > 0:
@@ -386,97 +405,45 @@ class Closures(Horizons, Geomodel, Parameters):
                     )
                 )
 
-        if len(avg_sand_thickness) == 0:
-            avg_sand_thickness = 0
-        self.cfg.write_to_logfile(
-            f"Sand Unit Thickness (m): mean: {np.mean(avg_sand_thickness):.2f}, "
-            f"std: {np.std(avg_sand_thickness):.2f}, min: {np.nanmin(avg_sand_thickness):.2f}, "
-            f"max: {np.max(avg_sand_thickness):.2f}"
-        )
-        self.cfg.write_to_logfile(
-            f"Shale Unit Thickness (m): mean: {np.mean(avg_shale_thickness):.2f}, "
-            f"std: {np.std(avg_shale_thickness):.2f}, min: {np.min(avg_shale_thickness):.2f}, "
-            f"max: {np.max(avg_shale_thickness):.2f}"
-        )
-        self.cfg.write_to_logfile(
-            f"Overall Unit Thickness (m): mean: {np.mean(avg_unit_thickness):.2f}, "
-            f"std: {np.std(avg_unit_thickness):.2f}, min: {np.min(avg_unit_thickness):.2f}, "
-            f"max: {np.max(avg_unit_thickness):.2f}"
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="sand_unit_thickness_combined_mean",
-            val=np.mean(avg_sand_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="sand_unit_thickness_combined_std",
-            val=np.std(avg_sand_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="sand_unit_thickness_combined_min",
-            val=np.min(avg_sand_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="sand_unit_thickness_combined_max",
-            val=np.max(avg_sand_thickness),
-        )
-        #
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="shale_unit_thickness_combined_mean",
-            val=np.mean(avg_shale_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="shale_unit_thickness_combined_std",
-            val=np.std(avg_shale_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="shale_unit_thickness_combined_min",
-            val=np.min(avg_shale_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="shale_unit_thickness_combined_max",
-            val=np.max(avg_shale_thickness),
-        )
+        sand_stats = _safe_stats(avg_sand_thickness)
+        shale_stats = _safe_stats(avg_shale_thickness)
+        overall_stats = _safe_stats(avg_unit_thickness)
+
+        if np.isnan(sand_stats["mean"]):
+            if self.cfg.verbose:
+                print("No sands in model (combined)")
+        else:
+            self.cfg.write_to_logfile(
+                f"Sand Unit Thickness (m): mean: {sand_stats['mean']:.2f}, "
+                f"std: {sand_stats['std']:.2f}, min: {sand_stats['min']:.2f}, "
+                f"max: {sand_stats['max']:.2f}"
+            )
 
         self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="overall_unit_thickness_combined_mean",
-            val=np.mean(avg_unit_thickness),
+            f"Shale Unit Thickness (m): mean: {shale_stats['mean']:.2f}, "
+            f"std: {shale_stats['std']:.2f}, min: {shale_stats['min']:.2f}, "
+            f"max: {shale_stats['max']:.2f}"
         )
         self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="overall_unit_thickness_combined_std",
-            val=np.std(avg_unit_thickness),
+            f"Overall Unit Thickness (m): mean: {overall_stats['mean']:.2f}, "
+            f"std: {overall_stats['std']:.2f}, min: {overall_stats['min']:.2f}, "
+            f"max: {overall_stats['max']:.2f}"
         )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="overall_unit_thickness_combined_min",
-            val=np.min(avg_unit_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="overall_unit_thickness_combined_max",
-            val=np.max(avg_unit_thickness),
-        )
+
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="sand_unit_thickness_combined_mean", val=float(sand_stats["mean"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="sand_unit_thickness_combined_std", val=float(sand_stats["std"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="sand_unit_thickness_combined_min", val=float(sand_stats["min"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="sand_unit_thickness_combined_max", val=float(sand_stats["max"]))
+
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="shale_unit_thickness_combined_mean", val=float(shale_stats["mean"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="shale_unit_thickness_combined_std", val=float(shale_stats["std"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="shale_unit_thickness_combined_min", val=float(shale_stats["min"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="shale_unit_thickness_combined_max", val=float(shale_stats["max"]))
+
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="overall_unit_thickness_combined_mean", val=float(overall_stats["mean"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="overall_unit_thickness_combined_std", val=float(overall_stats["std"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="overall_unit_thickness_combined_min", val=float(overall_stats["min"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="overall_unit_thickness_combined_max", val=float(overall_stats["max"]))
 
         non_zero_pixels = closure_segments[closure_segments != 0.0].shape[0]
         pct_non_zero = float(non_zero_pixels) / (
@@ -673,12 +640,13 @@ class Closures(Horizons, Geomodel, Parameters):
                                     i_indices, j_indices, k_indices.astype("int")
                                 ] += 1
                             except IndexError:
-                                print("\nIndex is out of bounds.")
-                                print(f"\tclosure_segments: {closure_segments}")
-                                print(f"\tvoxel_change_count: {voxel_change_count}")
-                                print(f"\ti_indices: {i_indices}")
-                                print(f"\tj_indices: {j_indices}")
-                                print(f"\tk_indices: {k_indices.astype('int')}")
+                                print("\nIndex is out of bounds in Closures.create_closure_labels_from_all_depth_maps()")
+                                print(f"\tclosure_segments shape: {closure_segments.shape}")
+                                print(f"\tvoxel_change_count shape: {voxel_change_count.shape}")
+                                print(f"\ti_indices min/max: {i_indices.min()}/{i_indices.max()}, size: {i_indices.size}")
+                                print(f"\tj_indices min/max: {j_indices.min()}/{j_indices.max()}, size: {j_indices.size}")
+                                print(f"\tk_indices min/max: {k_indices.astype('int').min()}/{k_indices.astype('int').max()}, size: {k_indices.size}")
+                                print(f"\tihorizon: {ihorizon}")
                                 pass
 
                     if slices_with_substitution > 0:
@@ -709,100 +677,47 @@ class Closures(Horizons, Geomodel, Parameters):
                     )
                 )
 
-        # TODO  handle case where avg_sand_thickness is zero-size array
-        try:
+        # Safely compute stats for sand/shale/overall thickness lists
+        sand_stats = _safe_stats(avg_sand_thickness)
+        shale_stats = _safe_stats(avg_shale_thickness)
+        overall_stats = _safe_stats(avg_unit_thickness)
+
+        if np.isnan(sand_stats["mean"]):
+            if self.cfg.verbose:
+                print("No sands in model")
+        else:
             self.cfg.write_to_logfile(
-                f"Sand Unit Thickness (m): mean: {np.mean(avg_sand_thickness):.2f}, "
-                f"std: {np.std(avg_sand_thickness):.2f}, min: {np.nanmin(avg_sand_thickness):.2f}, "
-                f"max: {np.max(avg_sand_thickness):.2f}"
+                f"Sand Unit Thickness (m): mean: {sand_stats['mean']:.2f}, "
+                f"std: {sand_stats['std']:.2f}, min: {sand_stats['min']:.2f}, "
+                f"max: {sand_stats['max']:.2f}"
             )
-        except:
-            print("No sands in model")
-        self.cfg.write_to_logfile(
-            f"Shale Unit Thickness (m): mean: {np.mean(avg_shale_thickness):.2f}, "
-            f"std: {np.std(avg_shale_thickness):.2f}, min: {np.min(avg_shale_thickness):.2f}, "
-            f"max: {np.max(avg_shale_thickness):.2f}"
-        )
-        self.cfg.write_to_logfile(
-            f"Overall Unit Thickness (m): mean: {np.mean(avg_unit_thickness):.2f}, "
-            f"std: {np.std(avg_unit_thickness):.2f}, min: {np.min(avg_unit_thickness):.2f}, "
-            f"max: {np.max(avg_unit_thickness):.2f}"
-        )
 
         self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="sand_unit_thickness_mean",
-            val=np.mean(avg_sand_thickness),
+            f"Shale Unit Thickness (m): mean: {shale_stats['mean']:.2f}, "
+            f"std: {shale_stats['std']:.2f}, min: {shale_stats['min']:.2f}, "
+            f"max: {shale_stats['max']:.2f}"
         )
         self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="sand_unit_thickness_std",
-            val=np.std(avg_sand_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="sand_unit_thickness_min",
-            val=np.min(avg_sand_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="sand_unit_thickness_max",
-            val=np.max(avg_sand_thickness),
-        )
-        #
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="shale_unit_thickness_mean",
-            val=np.mean(avg_shale_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="shale_unit_thickness_std",
-            val=np.std(avg_shale_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="shale_unit_thickness_min",
-            val=np.min(avg_shale_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="shale_unit_thickness_max",
-            val=np.max(avg_shale_thickness),
+            f"Overall Unit Thickness (m): mean: {overall_stats['mean']:.2f}, "
+            f"std: {overall_stats['std']:.2f}, min: {overall_stats['min']:.2f}, "
+            f"max: {overall_stats['max']:.2f}"
         )
 
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="overall_unit_thickness_mean",
-            val=np.mean(avg_unit_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="overall_unit_thickness_std",
-            val=np.std(avg_unit_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="overall_unit_thickness_min",
-            val=np.min(avg_unit_thickness),
-        )
-        self.cfg.write_to_logfile(
-            msg=None,
-            mainkey="model_parameters",
-            subkey="overall_unit_thickness_max",
-            val=np.max(avg_unit_thickness),
-        )
+        # Write numeric values to sql/meta storage (use floats or nan)
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="sand_unit_thickness_mean", val=float(sand_stats["mean"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="sand_unit_thickness_std", val=float(sand_stats["std"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="sand_unit_thickness_min", val=float(sand_stats["min"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="sand_unit_thickness_max", val=float(sand_stats["max"]))
+
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="shale_unit_thickness_mean", val=float(shale_stats["mean"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="shale_unit_thickness_std", val=float(shale_stats["std"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="shale_unit_thickness_min", val=float(shale_stats["min"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="shale_unit_thickness_max", val=float(shale_stats["max"]))
+
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="overall_unit_thickness_mean", val=float(overall_stats["mean"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="overall_unit_thickness_std", val=float(overall_stats["std"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="overall_unit_thickness_min", val=float(overall_stats["min"]))
+        self.cfg.write_to_logfile(msg=None, mainkey="model_parameters", subkey="overall_unit_thickness_max", val=float(overall_stats["max"]))
 
         non_zero_pixels = closure_segments[closure_segments != 0.0].shape[0]
         pct_non_zero = float(non_zero_pixels) / (
@@ -1322,7 +1237,21 @@ class Closures(Horizons, Geomodel, Parameters):
             num > 0
         ):  # TODO add whether smallest closure is below threshold constraint too
             s = [labels[labels == x].size for x in range(1, 1 + np.max(labels))]
-            labels = morphology.remove_small_objects(labels, threshold, connectivity=2)
+            # If labels only contain background and a single foreground label (0/1),
+            # use boolean path for remove_small_objects to avoid skimage warning.
+            vals = np.unique(labels)
+            try:
+                unique_set = set(vals.tolist())
+            except Exception:
+                unique_set = set(vals)
+            if unique_set <= {0, 1}:
+                mask = labels > 0
+                mask_clean = morphology.remove_small_objects(mask, min_size=threshold)
+                labels = measure.label(mask_clean, connectivity=2, background=0)
+            else:
+                labels = morphology.remove_small_objects(
+                    labels, threshold, connectivity=2
+                )
             t = [labels[labels == x].size for x in range(1, 1 + np.max(labels))]
             print(
                 f"Closure sizes before filter: {s}\nThreshold: {threshold}\n"
@@ -1530,20 +1459,40 @@ class Closures(Horizons, Geomodel, Parameters):
             cl["y_max"] = int(np.max(_c[1]))
             cl["z_min"] = int(np.min(_c[2]))
             cl["z_max"] = int(np.max(_c[2]))
-            cl["zbml_min"] = np.min(self.faults.faulted_depth[_c])
-            cl["zbml_max"] = np.max(self.faults.faulted_depth[_c])
-            cl["zbml_avg"] = np.mean(self.faults.faulted_depth[_c])
-            cl["zbml_std"] = np.std(self.faults.faulted_depth[_c])
-            cl["zbml_25pct"] = np.percentile(self.faults.faulted_depth[_c], 25)
-            cl["zbml_median"] = np.percentile(self.faults.faulted_depth[_c], 50)
-            cl["zbml_75pct"] = np.percentile(self.faults.faulted_depth[_c], 75)
-            cl["ng_min"] = np.min(self.faults.faulted_net_to_gross[_c])
-            cl["ng_max"] = np.max(self.faults.faulted_net_to_gross[_c])
-            cl["ng_avg"] = np.mean(self.faults.faulted_net_to_gross[_c])
-            cl["ng_std"] = np.std(self.faults.faulted_net_to_gross[_c])
-            cl["ng_25pct"] = np.percentile(self.faults.faulted_net_to_gross[_c], 25)
-            cl["ng_median"] = np.median(self.faults.faulted_net_to_gross[_c])
-            cl["ng_75pct"] = np.percentile(self.faults.faulted_net_to_gross[_c], 75)
+            try:
+                fd = self.faults.faulted_depth[_c]
+                cl["zbml_min"] = np.nanmin(fd)
+                cl["zbml_max"] = np.nanmax(fd)
+                cl["zbml_avg"] = np.nanmean(fd)
+                cl["zbml_std"] = np.nanstd(fd)
+                cl["zbml_25pct"] = np.nanpercentile(fd, 25)
+                cl["zbml_median"] = np.nanpercentile(fd, 50)
+                cl["zbml_75pct"] = np.nanpercentile(fd, 75)
+            except Exception:
+                cl["zbml_min"] = np.nan
+                cl["zbml_max"] = np.nan
+                cl["zbml_avg"] = np.nan
+                cl["zbml_std"] = np.nan
+                cl["zbml_25pct"] = np.nan
+                cl["zbml_median"] = np.nan
+                cl["zbml_75pct"] = np.nan
+            try:
+                ng = self.faults.faulted_net_to_gross[_c]
+                cl["ng_min"] = np.nanmin(ng)
+                cl["ng_max"] = np.nanmax(ng)
+                cl["ng_avg"] = np.nanmean(ng)
+                cl["ng_std"] = np.nanstd(ng)
+                cl["ng_25pct"] = np.nanpercentile(ng, 25)
+                cl["ng_median"] = np.nanmedian(ng)
+                cl["ng_75pct"] = np.nanpercentile(ng, 75)
+            except Exception:
+                cl["ng_min"] = np.nan
+                cl["ng_max"] = np.nan
+                cl["ng_avg"] = np.nan
+                cl["ng_std"] = np.nan
+                cl["ng_25pct"] = np.nan
+                cl["ng_median"] = np.nan
+                cl["ng_75pct"] = np.nan
             # Check for intersections with faults, salt and onlaps for closure type
             cl["intersects_fault"] = False
             cl["intersects_onlap"] = False
@@ -1561,45 +1510,90 @@ class Closures(Horizons, Geomodel, Parameters):
                 labels_copy[labels_copy != i] = 0
                 top_closure = get_top_of_closure(labels_copy)
                 near = seismic_nmf[0, ...][np.where(top_closure == 1)]
-                cl["near_min"] = np.min(near)
-                cl["near_max"] = np.max(near)
-                cl["near_avg"] = np.mean(near)
-                cl["near_std"] = np.std(near)
-                cl["near_25pct"] = np.percentile(near, 25)
-                cl["near_median"] = np.percentile(near, 50)
-                cl["near_75pct"] = np.percentile(near, 75)
+                try:
+                    cl["near_min"] = np.nanmin(near)
+                    cl["near_max"] = np.nanmax(near)
+                    cl["near_avg"] = np.nanmean(near)
+                    cl["near_std"] = np.nanstd(near)
+                    cl["near_25pct"] = np.nanpercentile(near, 25)
+                    cl["near_median"] = np.nanpercentile(near, 50)
+                    cl["near_75pct"] = np.nanpercentile(near, 75)
+                except Exception:
+                    cl["near_min"] = np.nan
+                    cl["near_max"] = np.nan
+                    cl["near_avg"] = np.nan
+                    cl["near_std"] = np.nan
+                    cl["near_25pct"] = np.nan
+                    cl["near_median"] = np.nan
+                    cl["near_75pct"] = np.nan
                 mid = seismic_nmf[1, ...][np.where(top_closure == 1)]
-                cl["mid_min"] = np.min(mid)
-                cl["mid_max"] = np.max(mid)
-                cl["mid_avg"] = np.mean(mid)
-                cl["mid_std"] = np.std(mid)
-                cl["mid_25pct"] = np.percentile(mid, 25)
-                cl["mid_median"] = np.percentile(mid, 50)
-                cl["mid_75pct"] = np.percentile(mid, 75)
+                try:
+                    cl["mid_min"] = np.nanmin(mid)
+                    cl["mid_max"] = np.nanmax(mid)
+                    cl["mid_avg"] = np.nanmean(mid)
+                    cl["mid_std"] = np.nanstd(mid)
+                    cl["mid_25pct"] = np.nanpercentile(mid, 25)
+                    cl["mid_median"] = np.nanpercentile(mid, 50)
+                    cl["mid_75pct"] = np.nanpercentile(mid, 75)
+                except Exception:
+                    cl["mid_min"] = np.nan
+                    cl["mid_max"] = np.nan
+                    cl["mid_avg"] = np.nan
+                    cl["mid_std"] = np.nan
+                    cl["mid_25pct"] = np.nan
+                    cl["mid_median"] = np.nan
+                    cl["mid_75pct"] = np.nan
                 far = seismic_nmf[2, ...][np.where(top_closure == 1)]
-                cl["far_min"] = np.min(far)
-                cl["far_max"] = np.max(far)
-                cl["far_avg"] = np.mean(far)
-                cl["far_std"] = np.std(far)
-                cl["far_25pct"] = np.percentile(far, 25)
-                cl["far_median"] = np.percentile(far, 50)
-                cl["far_75pct"] = np.percentile(far, 75)
+                try:
+                    cl["far_min"] = np.nanmin(far)
+                    cl["far_max"] = np.nanmax(far)
+                    cl["far_avg"] = np.nanmean(far)
+                    cl["far_std"] = np.nanstd(far)
+                    cl["far_25pct"] = np.nanpercentile(far, 25)
+                    cl["far_median"] = np.nanpercentile(far, 50)
+                    cl["far_75pct"] = np.nanpercentile(far, 75)
+                except Exception:
+                    cl["far_min"] = np.nan
+                    cl["far_max"] = np.nan
+                    cl["far_avg"] = np.nan
+                    cl["far_std"] = np.nan
+                    cl["far_25pct"] = np.nan
+                    cl["far_median"] = np.nan
+                    cl["far_75pct"] = np.nan
                 intercept = ai[np.where(top_closure == 1)]
-                cl["intercept_min"] = np.min(intercept)
-                cl["intercept_max"] = np.max(intercept)
-                cl["intercept_avg"] = np.mean(intercept)
-                cl["intercept_std"] = np.std(intercept)
-                cl["intercept_25pct"] = np.percentile(intercept, 25)
-                cl["intercept_median"] = np.percentile(intercept, 50)
-                cl["intercept_75pct"] = np.percentile(intercept, 75)
+                try:
+                    cl["intercept_min"] = np.nanmin(intercept)
+                    cl["intercept_max"] = np.nanmax(intercept)
+                    cl["intercept_avg"] = np.nanmean(intercept)
+                    cl["intercept_std"] = np.nanstd(intercept)
+                    cl["intercept_25pct"] = np.nanpercentile(intercept, 25)
+                    cl["intercept_median"] = np.nanpercentile(intercept, 50)
+                    cl["intercept_75pct"] = np.nanpercentile(intercept, 75)
+                except Exception:
+                    cl["intercept_min"] = np.nan
+                    cl["intercept_max"] = np.nan
+                    cl["intercept_avg"] = np.nan
+                    cl["intercept_std"] = np.nan
+                    cl["intercept_25pct"] = np.nan
+                    cl["intercept_median"] = np.nan
+                    cl["intercept_75pct"] = np.nan
                 gradient = gi[np.where(top_closure == 1)]
-                cl["gradient_min"] = np.min(gradient)
-                cl["gradient_max"] = np.max(gradient)
-                cl["gradient_avg"] = np.mean(gradient)
-                cl["gradient_std"] = np.std(gradient)
-                cl["gradient_25pct"] = np.percentile(gradient, 25)
-                cl["gradient_median"] = np.percentile(gradient, 50)
-                cl["gradient_75pct"] = np.percentile(gradient, 75)
+                try:
+                    cl["gradient_min"] = np.nanmin(gradient)
+                    cl["gradient_max"] = np.nanmax(gradient)
+                    cl["gradient_avg"] = np.nanmean(gradient)
+                    cl["gradient_std"] = np.nanstd(gradient)
+                    cl["gradient_25pct"] = np.nanpercentile(gradient, 25)
+                    cl["gradient_median"] = np.nanpercentile(gradient, 50)
+                    cl["gradient_75pct"] = np.nanpercentile(gradient, 75)
+                except Exception:
+                    cl["gradient_min"] = np.nan
+                    cl["gradient_max"] = np.nan
+                    cl["gradient_avg"] = np.nan
+                    cl["gradient_std"] = np.nan
+                    cl["gradient_25pct"] = np.nan
+                    cl["gradient_median"] = np.nan
+                    cl["gradient_75pct"] = np.nan
 
             clist.append(cl)
 
@@ -1774,9 +1768,25 @@ class Closures(Horizons, Geomodel, Parameters):
     def remove_small_objects(self, labels, min_filter=True):
         try:
             # Use the global minimum voxel size initially, before closure types are identified
-            labels_clean = morphology.remove_small_objects(
-                labels, self.cfg.closure_min_voxels
-            )
+            # If labels only contain background and a single foreground (0 and 1),
+            # `remove_small_objects` expects a boolean array to avoid a UserWarning
+            # from skimage. Convert to boolean, clean, then relabel. Otherwise
+            # call remove_small_objects on the labeled image as before.
+            vals = np.unique(labels)
+            try:
+                unique_set = set(vals.tolist())
+            except Exception:
+                unique_set = set(vals)
+            if unique_set <= {0, 1}:
+                mask = labels > 0
+                mask_clean = morphology.remove_small_objects(
+                    mask, min_size=self.cfg.closure_min_voxels
+                )
+                labels_clean = measure.label(mask_clean, connectivity=2, background=0)
+            else:
+                labels_clean = morphology.remove_small_objects(
+                    labels, self.cfg.closure_min_voxels
+                )
             if self.cfg.verbose:
                 print("labels_clean succeeded.")
                 print(
@@ -2362,9 +2372,16 @@ class Closures(Horizons, Geomodel, Parameters):
             _geo_age_voxels = (_age[single_closure == 1] + 0.5).astype("int")
             _ng_voxels = _ng[single_closure == 1]
             _geo_age_voxels = _geo_age_voxels[_ng_voxels >= avg_ng / 2.0]
-            min_geo_age = _geo_age_voxels.min() - 0.5
-            avg_geo_age = int(_geo_age_voxels.mean())
-            max_geo_age = _geo_age_voxels.max() + 0.5
+            if _geo_age_voxels.size == 0:
+                # Fallback when no voxels remain after filtering
+                _geo_age_voxels_all = (_age[single_closure == 1] + 0.5).astype("int")
+                min_geo_age = _geo_age_voxels_all.min() - 0.5 if _geo_age_voxels_all.size > 0 else 0.0
+                avg_geo_age = int(_geo_age_voxels_all.mean()) if _geo_age_voxels_all.size > 0 else 0
+                max_geo_age = _geo_age_voxels_all.max() + 0.5 if _geo_age_voxels_all.size > 0 else 1.0
+            else:
+                min_geo_age = _geo_age_voxels.min() - 0.5
+                avg_geo_age = int(_geo_age_voxels.mean())
+                max_geo_age = _geo_age_voxels.max() + 0.5
             _depth_geobody_voxels = depth_cube[single_closure == 1]
             min_depth = _depth_geobody_voxels.min()
             max_depth = _depth_geobody_voxels.max()
@@ -2814,9 +2831,16 @@ class Intersect3D(Closures):
                 _geo_age_voxels = (_age[single_closure == 1] + 0.5).astype("int")
                 _ng_voxels = _ng[single_closure == 1]
                 _geo_age_voxels = _geo_age_voxels[_ng_voxels >= avg_ng / 2.0]
-                min_geo_age = _geo_age_voxels.min() - 0.5
-                avg_geo_age = int(_geo_age_voxels.mean())
-                max_geo_age = _geo_age_voxels.max() + 0.5
+                if _geo_age_voxels.size == 0:
+                    # Fallback when no voxels remain after filtering
+                    _geo_age_voxels_all = (_age[single_closure == 1] + 0.5).astype("int")
+                    min_geo_age = _geo_age_voxels_all.min() - 0.5 if _geo_age_voxels_all.size > 0 else 0.0
+                    avg_geo_age = int(_geo_age_voxels_all.mean()) if _geo_age_voxels_all.size > 0 else 0
+                    max_geo_age = _geo_age_voxels_all.max() + 0.5 if _geo_age_voxels_all.size > 0 else 1.0
+                else:
+                    min_geo_age = _geo_age_voxels.min() - 0.5
+                    avg_geo_age = int(_geo_age_voxels.mean())
+                    max_geo_age = _geo_age_voxels.max() + 0.5
                 _depth_geobody_voxels = depth_cube[single_closure == 1]
                 min_depth = _depth_geobody_voxels.min()
                 max_depth = _depth_geobody_voxels.max()
@@ -3279,7 +3303,21 @@ def _flood_fill(horizon, max_column_height=20.0, verbose=False, debug=False):
     from skimage import measure
 
     labels = measure.label(diff, connectivity=2, background=0)
-    labels_clean = morphology.remove_small_objects(labels, 50)
+    vals, counts = np.unique(labels, return_counts=True)
+    print("DBG (VMG) unique labels:", vals, "counts:", counts)
+    print(f'\n labels: {labels}')
+    # If labels contain only background and a single foreground label (0/1),
+    # treat as a boolean mask to avoid skimage warning and then relabel.
+    try:
+        unique_set = set(vals.tolist())
+    except Exception:
+        unique_set = set(vals)
+    if unique_set <= {0, 1}:
+        mask = labels > 0
+        mask_clean = morphology.remove_small_objects(mask, min_size=50)
+        labels_clean = measure.label(mask_clean, connectivity=2, background=0)
+    else:
+        labels_clean = morphology.remove_small_objects(labels, min_size=50)
     labels_clean_list = list(set(labels_clean.flatten()))
     labels_clean_list.sort()
     for i in labels_clean_list:

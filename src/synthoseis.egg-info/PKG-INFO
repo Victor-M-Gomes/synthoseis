@@ -13,7 +13,7 @@ Requires-Dist: plotly
 Requires-Dist: ruff>=0.10.0
 Requires-Dist: scikit-image
 Requires-Dist: scipy
-Requires-Dist: setuptools>=76.0.0
+Requires-Dist: setuptools<81,>=76.0.0
 Requires-Dist: tables>=3.9.2
 Requires-Dist: tqdm
 Dynamic: license-file

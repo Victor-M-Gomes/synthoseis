@@ -13,7 +13,10 @@ dependencies = [
     "ruff>=0.10.0",
     "scikit-image",
     "scipy",
-    "setuptools>=76.0.0",
+    # Pin setuptools to <81 to avoid the `pkg_resources` deprecation warning
+    # used by some dependencies (e.g. `bruges`). See:
+    # https://setuptools.pypa.io/en/latest/pkg_resources.html
+    "setuptools<81,>=76.0.0",
     "tables>=3.9.2",
     "tqdm",
 ]
