@@ -1,7 +1,7 @@
 [project]
 name = "synthoseis"
 version = "0.1.0"
-description = "Add your description here"
+description = "Generate geological models"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -16,4 +16,13 @@ dependencies = [
     "setuptools>=76.0.0",
     "tables>=3.9.2",
     "tqdm",
+]
+
+[tool.setuptools.packages.find]
+# Use `where` and `exclude` to control package discovery (valid keys for setuptools)
+where = ["src"]
+exclude = [
+    "config*",
+    "notebooks*",
+    "img*",
 ]

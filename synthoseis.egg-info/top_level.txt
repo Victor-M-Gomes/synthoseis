@@ -1,0 +1,4 @@
+datagenerator
+docs
+rockphysics
+scripts
