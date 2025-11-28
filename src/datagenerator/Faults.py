@@ -2304,6 +2304,10 @@ class Faults(Horizons, Geomodel):
         # (cube_shape[0], cube_shape[1]). This avoids reshape errors later.
         def _center_crop_or_pad_2d(arr, target_shape):
             th, tw = target_shape
+            # If input is empty (zero area), return a zero-filled target array
+            if arr is None or arr.size == 0:
+                return np.zeros((th, tw), dtype=float)
+
             h, w = arr.shape
             # Crop if larger
             if h > th:
@@ -2313,8 +2317,10 @@ class Faults(Horizons, Geomodel):
                 pad_top = (th - h) // 2
                 pad_bottom = th - h - pad_top
                 arr = np.pad(arr, ((pad_top, pad_bottom), (0, 0)), mode="edge")
-            # Width
+
+            # Recompute shape after vertical crop/pad
             h, w = arr.shape
+            # Width: crop or pad
             if w > tw:
                 sw = (w - tw) // 2
                 arr = arr[:, sw : sw + tw]
@@ -2322,6 +2328,7 @@ class Faults(Horizons, Geomodel):
                 pad_left = (tw - w) // 2
                 pad_right = tw - w - pad_left
                 arr = np.pad(arr, ((0, 0), (pad_left, pad_right)), mode="edge")
+
             return arr
 
         xy_dis = xy_dis[
