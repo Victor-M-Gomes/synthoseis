@@ -50,6 +50,20 @@ class Horizons:
         if self.cfg.verbose:
             print("\n ... inserting 'water bottom' reflector in work cube ...\n")
         wb_time_map = maps[:, :, 1] - 1.5
+        
+        # Optionally clamp or flatten seabed to control water column thickness
+        seabed_max_depth = getattr(self.cfg, "seabed_max_depth", None)
+        flatten_seabed = getattr(self.cfg, "flatten_seabed", False)
+        
+        if flatten_seabed:
+            # Use a percentile (e.g., 10th) to create nearly flat seabed
+            target_depth = np.percentile(wb_time_map, 10.0)
+            wb_time_map = np.full_like(wb_time_map, target_depth)
+        elif seabed_max_depth is not None:
+            # Clamp maximum depth to prevent excessive water in dipping areas
+            max_depth_infilled = (seabed_max_depth / float(self.cfg.digi)) * self.cfg.infill_factor
+            wb_time_map = np.clip(wb_time_map, 0, max_depth_infilled)
+        
         wb_stats = [
             f"{x * self.cfg.digi / self.cfg.infill_factor:.2f}"
             for x in [wb_time_map.min(), wb_time_map.mean(), wb_time_map.max()]
@@ -631,6 +645,10 @@ class RandomHorizonStack(Horizons):
         shallowest_depth_to_build = (
             self.cfg.seabed_min_depth / float(self.cfg.digi)
         ) * self.cfg.infill_factor
+        # Percentile-based stopping criterion: if cfg.seabed_stop_percentile > 0,
+        # consider that the model is shallow enough when the P-th percentile of
+        # the current depth map is shallower than the target. Default 0 uses min().
+        seabed_stop_percentile = getattr(self.cfg, "seabed_stop_percentile", 0.0)
 
         # Build layers in a loop from deep to shallow until the minimum depth is reached and then break out.
         for i in range(20000):
@@ -659,9 +677,14 @@ class RandomHorizonStack(Horizons):
                     f" {thickness_map.max():.2f}"
                 )
 
-            # break out of loop when minimum depth is reached
-            if current_depth_map.min() <= shallowest_depth_to_build:
-                break
+            # break out of loop when minimum depth (or percentile) condition is reached
+            if seabed_stop_percentile and seabed_stop_percentile > 0.0:
+                # use low-percentile (e.g., 1.0) to ignore isolated shallow outliers
+                if np.percentile(current_depth_map, seabed_stop_percentile) <= shallowest_depth_to_build:
+                    break
+            else:
+                if current_depth_map.min() <= shallowest_depth_to_build:
+                    break
 
             # replace previous depth map for next iteration
             previous_depth_map = current_depth_map.copy()
@@ -677,6 +700,8 @@ class RandomHorizonStack(Horizons):
 
         if self.cfg.verbose:
             print("\n ... finished creating horizon layers ...")
+        # (seabed_max_depth clamp was removed — top horizon left as-generated)
+
         # Store maps in hdf file
         self.depth_maps = self.cfg.hdf_init("depth_maps", shape=depth_maps.shape)
         self.depth_maps[:] = depth_maps

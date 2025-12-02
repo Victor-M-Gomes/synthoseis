@@ -2205,13 +2205,24 @@ class Closures(Horizons, Geomodel, Parameters):
                     # labels_clean[np.where((labels_clean == i) & (np.abs(self.fault_throw - j) < .25))] = 0
                     labels_clean[np.where(labels_clean == i)] = 0
                     continue
-                avg_ng = _ng[single_closure == 1].mean()
+                _ng_sel = _ng[single_closure == 1]
+                avg_ng = float(_ng_sel.mean()) if _ng_sel.size > 0 else 0.0
                 _geo_age_voxels = (_age[single_closure == 1] + 0.5).astype("int")
                 _ng_voxels = _ng[single_closure == 1]
-                _geo_age_voxels = _geo_age_voxels[_ng_voxels >= avg_ng / 2.0]
-                min_geo_age = _geo_age_voxels.min() - 0.5
-                avg_geo_age = int(_geo_age_voxels.mean())
-                max_geo_age = _geo_age_voxels.max() + 0.5
+                if _ng_voxels.size > 0:
+                    _geo_age_voxels = _geo_age_voxels[_ng_voxels >= avg_ng / 2.0]
+                else:
+                    _geo_age_voxels = _geo_age_voxels.copy()
+                if _geo_age_voxels.size == 0:
+                    # Fallback when no voxels remain after filtering
+                    _geo_age_voxels_all = (_age[single_closure == 1] + 0.5).astype("int")
+                    min_geo_age = _geo_age_voxels_all.min() - 0.5 if _geo_age_voxels_all.size > 0 else 0.0
+                    avg_geo_age = int(_geo_age_voxels_all.mean()) if _geo_age_voxels_all.size > 0 else 0
+                    max_geo_age = _geo_age_voxels_all.max() + 0.5 if _geo_age_voxels_all.size > 0 else 1.0
+                else:
+                    min_geo_age = _geo_age_voxels.min() - 0.5
+                    avg_geo_age = int(_geo_age_voxels.mean())
+                    max_geo_age = _geo_age_voxels.max() + 0.5
                 _depth_geobody_voxels = depth_cube[single_closure == 1]
                 min_depth = _depth_geobody_voxels.min()
                 max_depth = _depth_geobody_voxels.max()
@@ -2368,10 +2379,14 @@ class Closures(Horizons, Geomodel, Parameters):
             if single_closure[single_closure > 0].size == 0:
                 labels_clean[np.where(labels_clean == i)] = 0
                 continue
-            avg_ng = _ng[single_closure == 1].mean()
+            _ng_sel = _ng[single_closure == 1]
+            avg_ng = float(_ng_sel.mean()) if _ng_sel.size > 0 else 0.0
             _geo_age_voxels = (_age[single_closure == 1] + 0.5).astype("int")
             _ng_voxels = _ng[single_closure == 1]
-            _geo_age_voxels = _geo_age_voxels[_ng_voxels >= avg_ng / 2.0]
+            if _ng_voxels.size > 0:
+                _geo_age_voxels = _geo_age_voxels[_ng_voxels >= avg_ng / 2.0]
+            else:
+                _geo_age_voxels = _geo_age_voxels.copy()
             if _geo_age_voxels.size == 0:
                 # Fallback when no voxels remain after filtering
                 _geo_age_voxels_all = (_age[single_closure == 1] + 0.5).astype("int")
@@ -2827,7 +2842,8 @@ class Intersect3D(Closures):
                     # labels_clean[np.where((labels_clean == i) & (np.abs(self.fault_throw - j) < .25))] = 0
                     labels_clean[np.where(labels_clean == i)] = 0
                     continue
-                avg_ng = _ng[single_closure == 1].mean()
+                _ng_sel = _ng[single_closure == 1]
+                avg_ng = float(_ng_sel.mean()) if _ng_sel.size > 0 else 0.0
                 _geo_age_voxels = (_age[single_closure == 1] + 0.5).astype("int")
                 _ng_voxels = _ng[single_closure == 1]
                 _geo_age_voxels = _geo_age_voxels[_ng_voxels >= avg_ng / 2.0]
@@ -3132,36 +3148,47 @@ def flood_fill_heap(test_array, empty_value=1.0e22, quiet=True):
     validPoints = input_array[~np.isnan(input_array)]
     validPoints = validPoints[validPoints < empty_value / 2]
     validPoints = validPoints[validPoints < 1.0e5]
-    validPoints = validPoints[validPoints > np.percentile(validPoints, 2)]
+    # Guard against small or empty validPoints before percentile/mean calls
+    if validPoints.size == 0:
+        return test_array
+    try:
+        p2 = np.percentile(validPoints, 2)
+    except Exception:
+        # Fallback: use min if percentile fails
+        p2 = validPoints.min()
+    validPoints = validPoints[validPoints > p2]
 
-    if len(validPoints) > 2:
+    if validPoints.size > 2:
         amin = validPoints.min()
         amax = validPoints.max()
     else:
         return test_array
 
     if not quiet:
+        # Print stats defensively
+        try:
+            median_v = np.median(validPoints)
+        except Exception:
+            median_v = np.nan
+        try:
+            mean_v = validPoints.mean()
+        except Exception:
+            mean_v = np.nan
         print(
             "    ... validPoints stats = ",
             validPoints.min(),
-            np.median(validPoints),
-            validPoints.mean(),
+            median_v,
+            mean_v,
             validPoints.max(),
         )
-        print(
-            "    ... validPoints %tiles = ",
-            np.percentile(validPoints, 0),
-            np.percentile(validPoints, 1),
-            np.percentile(validPoints, 5),
-            np.percentile(validPoints, 10),
-            np.percentile(validPoints, 25),
-            np.percentile(validPoints, 50),
-            np.percentile(validPoints, 75),
-            np.percentile(validPoints, 90),
-            np.percentile(validPoints, 95),
-            np.percentile(validPoints, 99),
-            np.percentile(validPoints, 100),
-        )
+        # Print percentiles defensively
+        percentiles = []
+        for pct in (0, 1, 5, 10, 25, 50, 75, 90, 95, 99, 100):
+            try:
+                percentiles.append(np.percentile(validPoints, pct))
+            except Exception:
+                percentiles.append(np.nan)
+        print("    ... validPoints %tiles = ", *percentiles)
         from datagenerator.util import import_matplotlib
 
         plt = import_matplotlib()
